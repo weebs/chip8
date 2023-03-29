@@ -219,30 +219,22 @@ type Chip8 =
     with
     static member screenSize = 2048
     static member memorySize = 4096
-    // member this.SetScreen x y value =
-    //     this.Screen[(int y * 64) + int x] <- value
     static member create(rom: byte[]) =
-        let memory = Array.create Chip8.memorySize 0uy
-        for i in [0..(rom.Length - 1)] do
-            memory.[i + 512] <- rom.[i]
         { 
             PC = 0x200us; I = 0us; DelayTimer = 0uy; SoundTimer = 0uy;
             Stack = []
-            // Screen = Array.create Chip8.screenSize 0uy
             Registers = (Map.empty, [0uy..15uy]) ||> List.fold (fun regs i -> regs.Add(i, 0uy))
-            Memory = Map.ofArray (Array.zip [| for i in 0us..4096us - 1us do yield i |] memory)
+            Memory = Map.ofArray [|
+                for i in 0us..511us do yield (i, 0uy)
+                yield! (rom |> Array.mapi (fun index byte -> (uint16 (index + 512), byte)))
+                for i in 0..(Chip8.memorySize - 512 - rom.Length) do yield (uint16 (i + 512 + rom.Length), 0uy)
+            |]
             Screen = Map.ofArray [| for i in 0..2047 do yield (i, 0uy) |]
         }
 
-let mutable flushCount = -1
 let applyInstruction (instruction: Instruction) (c8: Chip8) =
     // printfn "%A" instruction
     let c8 = { c8 with PC = c8.PC + 2us }
-    if flushCount > -1 then
-        flushCount <- flushCount + 1
-        if flushCount > 4 then
-            flushCount <- -1
-            fflush io.stdout
 
     match instruction with
     | ADD(vX, vY) ->
@@ -270,19 +262,15 @@ let applyInstruction (instruction: Instruction) (c8: Chip8) =
         { c8 with Registers = c8.Registers.Add(vX, y - x).Add(0xFuy, if y > x then 1uy else 0uy) }
     | SetST vX -> { c8 with SoundTimer = c8.Registers[vX] }
     | StoreRegisters vEnd ->
-        [0uy..vEnd] |> List.fold (fun c8 register -> { c8 with Memory = c8.Memory.Add(c8.I + uint16 register, c8.Registers[register]) }) c8
-        // for i in 0uy..vEnd do
-        //     c8.Memory[int c8.I + int i] <- c8.Registers[i]
-        // c8
+        (c8, [0uy..vEnd]) ||> List.fold (fun c8 register -> { c8 with Memory = c8.Memory.Add(c8.I + uint16 register, c8.Registers[register]) })
     | Unrecognized instr -> c8
     | WaitForKey vX -> c8
     | XOR(vX, vY) -> { c8 with Registers = c8.Registers.Add(vX, c8.Registers[vX] ^^^ c8.Registers[vY]) }
     | SkipIfKeyPressed vX -> c8
     | SkipIfKeyNotPressed vX -> c8
     | ClearScreen ->
-        { c8 with //PC     = c8.PC + 2us
-                  // Screen = Array.create Chip8.screenSize 0uy
-                  Screen = Map.ofArray [| for i in 0..2047 do yield (i, 0uy) |]
+        { c8 with // Screen = Array.create Chip8.screenSize 0uy
+            Screen = Map.ofArray [| for i in 0..2047 do yield (i, 0uy) |]
         }
     | Return ->
         match c8.Stack with

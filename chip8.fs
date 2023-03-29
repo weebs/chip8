@@ -234,9 +234,16 @@ type Chip8 =
             Screen = Map.ofArray [| for i in 0..2047 do yield (i, 0uy) |]
         }
 
+let mutable flushCount = -1
 let applyInstruction (instruction: Instruction) (c8: Chip8) =
     // printfn "%A" instruction
     let c8 = { c8 with PC = c8.PC + 2us }
+    if flushCount > -1 then
+        flushCount <- flushCount + 1
+        if flushCount > 4 then
+            flushCount <- -1
+            fflush io.stdout
+
     match instruction with
     | ADD(vX, vY) ->
         let x = c8.Registers[vX]
@@ -352,7 +359,10 @@ let applyInstruction (instruction: Instruction) (c8: Chip8) =
                     
                     // c8.SetScreen (byte x) (byte y) (existingPixel ^^^ 1uy)
                     c8 <- { c8 with Screen = c8.Screen.Add(index, existingPixel ^^^ 1uy) }
-        fflush io.stdout
+
+
+        if not setVF then fflush io.stdout // Conditionally flushing helps reduce flicker
+
         { c8 with Registers = c8.Registers.Add(0xFuy, if setVF then 1uy else 0uy) }
     | StoreBCD vX ->
         let value = c8.Registers[vX]

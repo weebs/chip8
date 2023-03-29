@@ -10,9 +10,16 @@ open Tmds.Linux
 [<DllImport("libc")>] extern nativeint dlsym (nativeint _module, string symbol)
 [<DllImport("stdout")>] extern nativeint get_stdout()
 
+
+let _stdout =
+    let _module = dlopen("libc", 2)
+    let ptr = dlsym(_module, "stdout")
+    let ptr = NativeInterop.NativePtr.ofNativeInt<nativeint> ptr
+    NativeInterop.NativePtr.read ptr
+
 type io =
     static member stdin = LibC.STDIN_FILENO
-    static member stdout = get_stdout ()
+    static member stdout = _stdout
     
 let inline fgetc _ = (Console.ReadKey()).KeyChar
 
